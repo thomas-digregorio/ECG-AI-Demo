@@ -1,0 +1,22 @@
+# Core Deep Learning (CUDA 12.8 compliant)
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch
+torchvision
+torchaudio
+
+# ECG & Medical Data
+wfdb        # For loading .dat/.hea files from PhysioNet
+
+# Data Processing
+pandas
+numpy
+scikit-learn
+
+# App & Visualization
+streamlit
+wandb
+matplotlib
+seaborn
+tqdm
+plotly      # For interactive ECG plots in Streamlit
+jupyter     # For running notebooks

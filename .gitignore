@@ -1,0 +1,30 @@
+# General
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+Thumbs.db
+*.log
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb_checkpoints
+
+# Project Specific
+data/
+outputs/
+wandb/
+
+# Models (Optional: keep if you want to commit the best model, usually ignored if large)
+# src/models/*.pth
