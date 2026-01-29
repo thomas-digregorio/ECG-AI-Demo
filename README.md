@@ -2,7 +2,7 @@
 
 An AI-powered screening tool that detects structural heart abnormalities from standard 12-lead ECGs using Deep Learning (ResNet1d-50).
 
-## 🫀 Project Overview
+## Project Overview
 This project classifies ECG signals into 5 Diagnostic Superclasses based on the **PTB-XL** dataset standard:
 1.  **NORM**: Normal ECG
 2.  **MI**: Myocardial Infarction
@@ -15,7 +15,7 @@ It includes:
 - **Saliency Maps (Grad-CAM)** to explain model predictions.
 - **Stratified Group K-Fold** training evaluation to prevent patient leakage.
 
-## 🛠️ Installation
+## Installation
 
 1.  **Create Environment**
     ```bash
@@ -34,7 +34,7 @@ It includes:
     - Download the **PTB-XL** dataset (version 1.0.3) from [PhysioNet](https://physionet.org/content/ptb-xl/).
     - Extract it so `ptbxl_database.csv` is at `data/ptb-xl/ptbxl_database.csv`.
 
-## 🚀 Usage
+## Usage
 
 ### 1. Training
 Train the ResNet1d-50 model on your local GPU.
@@ -56,7 +56,17 @@ Launch the interactive dashboard.
 streamlit run app.py
 ```
 
-## 🏗️ Project Structure
+## Phase 2: Multimodal Fusion (Current)
+We have enhanced the model to mimic a clinician's workflow by incorporating **Clinical Metadata**.
+*   **Dual-Branch Architecture**:
+    *   **Branch A (Vision)**: ResNet1d-50 processing the raw ECG waveform.
+    *   **Branch B (Context)**: MLP processing tabular patient data.
+*   **Context Features (11 Dimensions)**:
+    *   **Demographics**: Age (with Missingness Mask), Sex, Weight, Height.
+    *   **Medical History**: Presence of Pacemaker (mined from labels).
+    *   **Medication**: Detection of Digoxin/Quinidine usage (to reduce False Positive Ischemia).
+
+## Project Structure
 ```
 .
 ├── app.py                  # Streamlit Dashboard Entrypoint

@@ -36,7 +36,32 @@ def load_metadata():
     csv_path = os.path.join(DATA_DIR, "ptbxl_database.csv")
     if not os.path.exists(csv_path):
         return None
-    return pd.read_csv(csv_path, index_col='ecg_id')
+    df = pd.read_csv(csv_path, index_col='ecg_id')
+    
+    # Load SCP Statements for Mapping
+    scp_path = os.path.join(DATA_DIR, "scp_statements.csv")
+    if os.path.exists(scp_path):
+        agg_df = pd.read_csv(scp_path, index_col=0)
+        agg_df = agg_df[agg_df.diagnostic_class.notnull()]
+        code_map = agg_df.diagnostic_class.to_dict()
+        
+        # Helper to get superclass list
+        def get_superclasses(scp_str):
+            try:
+                d = ast.literal_eval(scp_str)
+                res = set()
+                for k in d:
+                    if k in code_map:
+                        res.add(code_map[k])
+                return list(res)
+            except:
+                return []
+        
+        df['superclasses'] = df['scp_codes'].apply(get_superclasses)
+    else:
+        df['superclasses'] = []
+        
+    return df
 
 # 2. Helper Functions
 def load_signal(filename):
@@ -132,6 +157,19 @@ def main():
     st.title("❤️ AI Structural Heart Disease Screener")
     st.markdown("Analyzing **10-second 12-lead ECGs** for hidden pathologies.")
 
+    with st.expander("ℹ️ Guide: Diagnostic Categories"):
+        st.markdown("""
+        The model classifies ECGs into 5 "Superclasses":
+        
+        | Class | Name | Description |
+        |-------|------|-------------|
+        | **NORM** | **Normal** | Healthy heart rhythm and structure. No abnormalities. |
+        | **MI** | **Myocardial Infarction** | Heart Attack (past or present). Signs of tissue damage or ischemia. |
+        | **STTC** | **ST/T Changes** | Repolarization abnormalities. Can indicate ischemia, electrolyte imbalance, or drug effects (like Digitalis). |
+        | **CD** | **Conduction Disturbance** | "Wiring" issues. Blockages in the electrical pathways (e.g., Bundle Branch Blocks). |
+        | **HYP** | **Hypertrophy** | Enlarged heart muscle (thickening of walls), often due to high blood pressure. |
+        """)
+
     model, device = load_model()
     df = load_metadata()
 
@@ -145,9 +183,6 @@ def main():
     # Filter for Curated Examples
     # We try to find 2 of each class
     curated_ids = []
-    # Simple search if not hardcoded
-    # In a real app, we'd pre-select specific IDs that look textbook
-    # For now, we take the first 2 of each class found in df
     
     example_mode = st.sidebar.radio("Input Source", ["Curated Examples", "Random Patient", "By ID"])
     
@@ -157,11 +192,19 @@ def main():
         # Quick lookup (cached ideally)
         examples = {}
         for cls in CLASSES:
-            # Find rows where scp_codes contains this class with high likelihood
-            matches = df[df['scp_codes'].str.contains(f"'{cls}'")]
+            # Find rows where superclasses list contains this class
+            # df['superclasses'] is a list of strings
+            
+            # Simple apply to filter
+            matches = df[df['superclasses'].apply(lambda x: cls in x if isinstance(x, list) else False)]
+            
             if len(matches) > 0:
-                examples[cls] = matches.index[:2].tolist()
+                examples[cls] = matches.index[:5].tolist() # Take top 5
         
+        if not examples:
+            st.warning("No examples found. Check scp_statements.csv mapping.")
+            return
+
         category = st.sidebar.selectbox("Disease Type", list(examples.keys()))
         selected_id = st.sidebar.selectbox("Patient ID", examples[category])
         
@@ -222,7 +265,7 @@ def main():
     st.divider()
     st.subheader("Explainability (Saliency Map)")
     
-    target_cls = st.selectbox("Explain why model predicts:", CLASSES, index=np.argmax(probs))
+    target_cls = st.selectbox("Explain why model predicts:", CLASSES, index=int(np.argmax(probs)))
     target_idx = CLASSES.index(target_cls)
     
     if st.button(f"Generate Heatmap for {target_cls}"):

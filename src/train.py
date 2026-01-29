@@ -11,6 +11,14 @@ from sklearn.metrics import roc_auc_score
 from tqdm import tqdm
 import wfdb
 import ast
+import sys
+
+# Ensure 'src' module can be found
+# Add the project root directory (two levels up from src/train.py) to sys.path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.append(project_root)
 
 # Project Imports
 from src.data.dataset import PTBXLDataset
@@ -31,23 +39,49 @@ def load_metadata(data_dir):
     
     df = pd.read_csv(csv_path, index_col='ecg_id')
     
-    # Process scp_codes to get a single 'stratify_label' for splitting
+    # --- Load SCP Statements for Mapping ---
+    scp_path = os.path.join(data_dir, "scp_statements.csv")
+    if os.path.exists(scp_path):
+        agg_df = pd.read_csv(scp_path, index_col=0)
+        # We need the 'diagnostic_class' column which maps 'IMI' -> 'MI'
+        # Create a dictionary: {'IMI': 'MI', 'NORM': 'NORM', ...}
+        # Filter only rows that have a diagnostic class
+        agg_df = agg_df[agg_df.diagnostic_class.notnull()]
+        code_map = agg_df.diagnostic_class.to_dict()
+    else:
+        print("Warning: scp_statements.csv not found. Label mapping might fail.")
+        code_map = {}
+
+    # Map granular scp_codes to superclasses
+    # scp_codes is a string like "{'IMI': 50.0, 'AMI': 50.0}"
+    def aggregate_diagnostic(y_dic):
+        tmp = []
+        try:
+            # Parse string to dict
+            if isinstance(y_dic, str):
+                y_dic = ast.literal_eval(y_dic)
+            for key in y_dic:
+                if key in code_map:
+                    tmp.append(code_map[key])
+        except:
+            pass
+        return list(set(tmp))
+
+    # Create a new column 'diagnostic_superclass' (List of strings)
+    df['diagnostic_superclass'] = df.scp_codes.apply(aggregate_diagnostic)
+
+    # --- Stratification Logic ---
     # We pick the most frequent class for stratification purposes if multiple exist
-    # Or just use the first valid superclass found
     lbl_map = {'NORM': 0, 'MI': 1, 'STTC': 2, 'CD': 3, 'HYP': 4}
     
     # Helper to find primary class
-    def get_primary_class(scp_str):
-        try:
-            d = ast.literal_eval(scp_str)
-            for k in d.keys():
-                if k in lbl_map:
-                    return lbl_map[k]
-        except:
-            pass
+    def get_primary_class(superclasses):
+        for c in superclasses:
+            if c in lbl_map:
+                return lbl_map[c]
         return 0 # Default to NORM
 
-    df['strat_target'] = df['scp_codes'].apply(get_primary_class)
+    df['strat_target'] = df['diagnostic_superclass'].apply(get_primary_class)
     return df
 
 def calculate_pos_weights(dataset):
@@ -67,10 +101,16 @@ def calculate_pos_weights(dataset):
     
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Calc Weights"):
         try:
-            d = ast.literal_eval(row['scp_codes'])
-            for k in d:
-                if k in lbl_map:
-                    counts[lbl_map[k]] += 1
+            # Check for our new pre-processed column
+            if 'diagnostic_superclass' in row:
+                for k in row['diagnostic_superclass']:
+                    if k in lbl_map:
+                        counts[lbl_map[k]] += 1
+            else:
+                d = ast.literal_eval(row['scp_codes'])
+                for k in d:
+                    if k in lbl_map:
+                        counts[lbl_map[k]] += 1
         except:
             pass
             
@@ -133,7 +173,7 @@ def train(fold=1):
 
     # 6. WandB (Optional Check)
     import wandb
-    wandb.init(project="cardio-ecg-screen", padding=fold, config={"model": "resnet1d50", "fold": fold})
+    wandb.init(project="cardio-ecg-screen", config={"model": "resnet1d50", "fold": fold})
     wandb.watch(model)
 
     # 7. Training Loop
