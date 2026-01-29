@@ -56,6 +56,22 @@ Launch the interactive dashboard.
 streamlit run app.py
 ```
 
+## Phase 1: Blind Interpretation (Completed)
+The initial model was a **Signal-Only** classifier, similar to how a cardiologist reads an ECG without knowing the patient.
+*   **Model**: ResNet1d-50 trained on raw waveforms.
+*   **Limitation**: It struggled to differentiate between **Ischemia (MI)** and **Digitalis Effect** (drug-induced ST depression), leading to False Positives.
+*   *Verdict*: Good signal processing, but lacks clinical context.
+
+### Results (Phase 1: Blind)
+| Diagnostic Class | AUROC | Observation |
+| :--- | :--- | :--- |
+| **NORM** (Normal) | **0.94** | Excellent detection of healthy patients. |
+| **MI** (Infarction) | **0.88** | Moderate. **Confused by Digitalis effect.** |
+| **STTC** (ST/T Changes) | **0.86** | Struggled to distinguish from MI and drugs. |
+| **CD** (Conduction Dist.) | **0.91** | Good detection of bundle branch blocks. |
+| **HYP** (Hypertrophy) | **0.89** | Reasonable sensitivity. |
+| **AVERAGE** | **0.90** | Strong baseline, but lacks specificity in complex cases. |
+
 ## Phase 2: Multimodal Fusion (Current)
 We have enhanced the model to mimic a clinician's workflow by incorporating **Clinical Metadata**.
 *   **Dual-Branch Architecture**:
@@ -65,6 +81,33 @@ We have enhanced the model to mimic a clinician's workflow by incorporating **Cl
     *   **Demographics**: Age (with Missingness Mask), Sex, Weight, Height.
     *   **Medical History**: Presence of Pacemaker (mined from labels).
     *   **Medication**: Detection of Digoxin/Quinidine usage (to reduce False Positive Ischemia).
+
+## System Design & Technical Architecture
+### Multimodal Late Fusion
+To achieve robust performance, we use a **Late Fusion** architecture:
+1.  **Visual Backbone (ResNet1d-50)**:
+    *   Input: `(12, 5000)` ECG Signal (500Hz, 10s).
+    *   Output: 128-dimensional latent vector (The "Visual Embedding").
+    *   *Why*: ResNets are state-of-the-art for time-series extraction.
+2.  **Context Network (MLP)**:
+    *   Input: 11-dimensional Clinical Vector (Age, Sex, Weight, Drugs).
+    *   Architecture: `Linear(11->64) -> ReLU -> Dropout -> Linear(64->16)`.
+    *   Output: 16-dimensional latent vector (The "Risk Embedding").
+    *   *Why*: We use **Medical Entity Embedding** to let the model learn non-linear risk profiles (e.g., "Male+Overweight = High Risk", "Female+Underweight = Different Risk").
+3.  **Fusion Head**:
+    *   Operation: Concatenation `[Visual_128, Context_16]`.
+    *   Final Classifier: `Linear(144 -> 5 Classes)`.
+
+## Data Nuances & Cleaning
+Real-world medical data is messy. We implemented several specific cleaning steps:
+*   **The "Age 300" Problem**: Legacy sensors recorded unknown ages as `300`. We implemented a cleaning logic: `if age > 120 or NaN -> Age=0, Mask=0` (Zero-Masking Strategy).
+*   **The "Digitalis Scoop"**: We explicitly mine the `scp_codes` for Digoxin (`DIG`) usage. This creates a feature `On_Digoxin=1`.
+    *   *Impact*: Digoxin causes ST-depression (a "scoop" shape) that mimics myocardial infarction. Without this context, the model falsely predicts Heart Attacks. With this context, it learns to ignore the drug-induced artifact.
+
+## References
+1.  **PTB-XL Dataset**: Wagner, P. et al. "PTB-XL, a large publicly available electrocardiography dataset." Scientific Data (2020).
+2.  **ResNet1d**: He, K. et al. "Deep Residual Learning for Image Recognition." CVPR (2016) (Adapted for 1D Signal).
+3.  **Grad-CAM**: Selvaraju, R. R. et al. "Grad-CAM: Visual Explanations from Deep Networks." ICCV (2017).
 
 ## Project Structure
 ```
