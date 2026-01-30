@@ -98,6 +98,16 @@ To achieve robust performance, we use a **Late Fusion** architecture:
     *   Operation: Concatenation `[Visual_128, Context_16]`.
     *   Final Classifier: `Linear(144 -> 5 Classes)`.
 
+### Results (Phase 2: Fusion vs Blind)
+| Diagnostic Class | Blind AUROC | Fusion AUROC |
+| :--- | :--- | :--- |
+| **NORM** (Normal) | **0.957** | 0.945 |
+| **MI** (Infarction) | 0.929 | **0.931** |
+| **STTC** (ST/T Change) | **0.939** | 0.931 |
+| **CD** (Conduction) | 0.923 | **0.932** |
+| **HYP** (Hypertrophy) | **0.927** | 0.896 |
+| **MACRO AVG** | **0.935** | 0.927 |
+
 ## Data Nuances & Cleaning
 Real-world medical data is messy. We implemented several specific cleaning steps:
 *   **The "Age 300" Problem**: Legacy sensors recorded unknown ages as `300`. We implemented a cleaning logic: `if age > 120 or NaN -> Age=0, Mask=0` (Zero-Masking Strategy).
